@@ -1,90 +1,93 @@
 import pandas as pd
 import numpy as np
+from typing import Union
 
-# class ParetoOptimizer:
+class ParetoOptimalPointsFinder:
+    """
+    A class to find Pareto-optimal points in a dataset.
+    """
 
-#     def __init__(self):
-#        self.costs = None
-#        self.sense = None
+    def __init__(self, data:Union[pd.DataFrame, np.ndarray], accuracy_minimise: bool=True, fairness_minimise: bool=True) -> None:
+        """
+        Initialize the class with data, user preferences for minimization.
 
-#     def set_inputs(self, costs, sense):
-#         # Input validation
-       
-#         self.costs = costs
-#         self.sense = sense
-
-#     def _is_dominated(self, row1, row2):
-#         """Check if row1 is dominated by row2""" 
-#         for i in range(len(row1)):
-#             if self.sense[i] == "min" and row1[i] > row2[i]:
-#                 return True
-#         return False
-            
-#     def optimize(self):
-#         pareto_set = []
-#         for i, row1 in self.costs.iterrows():
-#             dominated = False  
-#             for j, row2 in self.costs.iterrows():
-#                 if i == j:
-#                     continue     
-#                 dominated |= self._is_dominated(row1, row2)
-
-#             if not dominated:
-#                 pareto_set.append(row1)
-
-#         return pd.DataFrame(pareto_set, columns=self.costs.columns)
-
-class ParetoOptimizer:
-
-    def __init__(self): 
-        self.costs = None
-        self.sense = None
-        self.optimize_for = None
-
-    def set_inputs(self, costs, optimize_for="min"):
-        """Set costs data and optimization approach"""
-        self.costs = costs
-        self.optimize_for = optimize_for
-
-    def configure(self):
-        """Configure min/max sense based on optimize_for"""
-        n_cols = len(self.costs.columns)
-        
-        if self.optimize_for == "min":
-            # Initialize columns as minimized
-            self.sense = ["min"]*n_cols  
+        Parameters:
+        - data (Union[pd.DataFrame, np.ndarray]): 2D data with two columns representing accuracy and fairness scores.
+        - accuracy_minimise (bool, optional): Whether to minimize the first objective (accuracy). Defaults to True.
+        - fairness_minimise (bool, optional): Whether to minimize the second objective (fairness score). Defaults to True.
+        """
+        if isinstance(data, pd.DataFrame):
+            self.data = data.to_numpy()
         else:
-            # Initialize columns as maximized
-            self.sense = ["max"]*n_cols
+            self.data = data
+        self.accuracy_minimise = accuracy_minimise
+        self.fairness_minimise = fairness_minimise
 
-    def toggle_objective(self, column): 
-        """Flip column's optimization sense"""
-        col_idx = self.costs.columns.get_loc(column)
-        self.sense[col_idx] = "min" if self.sense[col_idx]=="max" else "max"
+    def find(self):
+        """
+        Find Pareto-optimal points in the stored data based on user preferences.
+
+        Returns:
+        - Union[pd.DataFrame, np.ndarray]: Pareto-optimal points from the input data.
+        """
+
+        pareto_points = []
+
+        for i, (accuracy_1, fair_1) in enumerate(self.data):
+            is_pareto = True
+
+            for j, (accuracy_2, fair_2) in enumerate(self.data):
+                if i == j:
+                    continue  # Skip self-comparison
+
+                # Check Pareto dominance based on user preferences stored in init
+                if (
+                    (accuracy_1 < accuracy_2 if self.accuracy_minimise else accuracy_1 > accuracy_2) and
+                    (fair_1 < fair_2 if self.fairness_minimise else fair_1 > fair_2)
+                ):
+                    is_pareto = False
+                    break
+
+            if is_pareto:
+                pareto_points.append((accuracy_1, fair_1))
+
+        return np.array(pareto_points)
     
-    def optimize(self):
-        self.configure()
-        
-        pareto_optimal_set = []
-        for index1, row1 in self.costs.iterrows():
-            dominated = False
-            for index2, row2 in self.costs.iterrows():
-                if index1 == index2: continue
-                    
-                # Check dominance 
-                dominated =  self._dominates(row1, row2)
+    def explain_pareto_points(self, pareto_points):
+        """
+        Provide explanations for why each point in the Pareto frontier is considered optimal.
 
-                if self.optimize_for == "max":
-                    dominated = self._dominates(row2, row1)
+        Parameters:
+        - pareto_points (Union[pd.DataFrame, np.ndarray]): The Pareto-optimal points found by the `find` method.
 
-            if not dominated:
-                pareto_optimal_set.append(row1)
-        
-        return pd.DataFrame(pareto_optimal_set, columns=self.costs.columns)
+        Returns:
+        - List[Dict[str, str]]: A list of explanations for each Pareto-optimal point.
 
-    def _dominates(self, row1, row2):
-        """Return True if row1 dominates row2"""     
-        for i in range(len(row1)):
-            if self.sense[i] == "min" and row1[i] > row2[i]:
-                return True  
-        return False
+        This function analyzes the data and Pareto points to explain why each point is not dominated by others.
+        """
+
+        explanations = []
+        for i, point in enumerate(pareto_points):
+            explanation = {
+                'Point': f'Point {i + 1}',
+                'Explanation': 'This point satisfies the following criteria:'
+            }
+
+            for j, (accuracy_2, fair_2) in enumerate(self.data):
+                if i == j:
+                    continue  # Skip self-comparison
+
+                # Analyze why this point is not dominated by point j
+                domination_text = (
+                    f'better accuracy' if (point[0] < accuracy_2 if self.accuracy_minimise else point[0] > accuracy_2) else 'worse accuracy'
+                )
+                domination_text += (
+                    f' and better fairness' if (point[1] < fair_2 if self.fairness_minimise else point[1] > fair_2) else ' and worse fairness'
+                )
+                explanation[f'Criteria {j + 1}'] = f'Not dominated ({domination_text})'
+
+            explanations.append(explanation)
+
+        return explanations
+
+
