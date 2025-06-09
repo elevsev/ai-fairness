@@ -1,0 +1,13 @@
+```
+project/
+│
+├── app.py            # Main entrypoint
+├── data.py           # Sample data and constants
+├── styles.py         # Shared styles and theme definitions
+│
+├── pages/
+│   ├── home.py       # Home page layout & callbacks
+│   ├── details.py    # Details page layout & callbacks
+│   ├── results.py    # Results page layout & callbacks
+│   └── faq.py        # FAQ page layout & callbacks
+```
